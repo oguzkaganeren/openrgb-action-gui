@@ -6,7 +6,7 @@ use crate::model::Rule;
 fn config_dir() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("~/.config"))
-        .join("openrgb-action-gui")
+        .join("openrgb-ruler")
 }
 
 fn rules_path() -> PathBuf {

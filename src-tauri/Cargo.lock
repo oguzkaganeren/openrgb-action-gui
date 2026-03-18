@@ -2365,7 +2365,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openrgb-action"
+name = "openrgb-ruler"
 version = "0.1.0"
 dependencies = [
  "chrono",

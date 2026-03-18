@@ -54,7 +54,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'OpenRGB Action GUI ${{ github.ref_name }}'
+          releaseName: 'OpenRGB Ruler ${{ github.ref_name }}'
           releaseBody: |
             ## Changes in ${{ github.ref_name }}
 
@@ -65,18 +65,18 @@ jobs:
             ### AppImage
             Download the `.AppImage` file, make it executable and run:
             ```bash
-            chmod +x openrgb-action_*.AppImage
-            ./openrgb-action_*.AppImage
+            chmod +x openrgb-ruler_*.AppImage
+            ./openrgb-ruler_*.AppImage
             ```
 
             ### Debian/Ubuntu (.deb)
             ```bash
-            sudo dpkg -i openrgb-action_*.deb
+            sudo dpkg -i openrgb-ruler_*.deb
             ```
 
             ### RPM (Fedora/openSUSE)
             ```bash
-            sudo rpm -i openrgb-action-*.rpm
+            sudo rpm -i openrgb-ruler-*.rpm
             ```
 
             ### Arch Linux(Based)
@@ -85,8 +85,8 @@ jobs:
             # Install debtap if not already installed (AUR)
             yay -S debtap
             sudo debtap -u
-            debtap openrgb-action_*.deb
-            sudo pacman -U openrgb-action-*.pkg.tar.zst
+            debtap openrgb-ruler_*.deb
+            sudo pacman -U openrgb-ruler-*.pkg.tar.zst
             ```
             Or use the AppImage directly (no conversion needed).
 

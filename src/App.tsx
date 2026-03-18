@@ -32,7 +32,7 @@ function App() {
       <header className="app-header">
         <div className="app-header-inner">
           <span className="app-logo">⬡</span>
-          <span className="app-title">OpenRGB Action</span>
+          <span className="app-title">OpenRGB Ruler</span>
         </div>
         <div className="app-header-right">
           <label className="autostart-toggle" title={autostartError ?? "Start automatically on login"}>

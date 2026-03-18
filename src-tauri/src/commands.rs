@@ -74,7 +74,7 @@ fn autostart_path() -> std::path::PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| std::path::PathBuf::from("~/.config"))
         .join("autostart")
-        .join("openrgb-action-gui.desktop")
+        .join("openrgb-ruler.desktop")
 }
 
 #[tauri::command]
@@ -97,7 +97,7 @@ pub fn set_autostart(enabled: bool) -> Result<(), String> {
                 .map_err(|e| format!("Cannot determine executable path: {}", e))?;
             let exe_str = exe.to_string_lossy();
             let desktop = format!(
-                "[Desktop Entry]\nType=Application\nName=OpenRGB Action\nExec={exe_str} --tray\nX-GNOME-Autostart-enabled=true\n",
+                "[Desktop Entry]\nType=Application\nName=OpenRGB Ruler\nExec={exe_str} --tray\nX-GNOME-Autostart-enabled=true\n",
             );
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent)
