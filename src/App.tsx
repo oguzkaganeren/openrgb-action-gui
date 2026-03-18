@@ -30,7 +30,7 @@ function App() {
       <header className="app-header">
         <div className="app-header-inner">
           <span className="app-logo">⬡</span>
-          <span className="app-title">OpenRGB Action GUI</span>
+          <span className="app-title">OpenRGB Action</span>
         </div>
         <StatusBar available={available} />
       </header>

@@ -2365,7 +2365,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "openrgb-action-gui"
+name = "openrgb-action"
 version = "0.1.0"
 dependencies = [
  "chrono",

@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "openrgb-action-gui",
+  "productName": "openrgb-action",
   "version": "0.1.0",
-  "identifier": "com.openrgb-action-gui.app",
+  "identifier": "com.openrgb-action.app",
   "build": {
     "beforeDevCommand": "yarn dev",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "openrgb-action-gui",
+        "title": "OpenRGB Action",
         "width": 800,
         "height": 600
       }

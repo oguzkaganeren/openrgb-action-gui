@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    openrgb_action_gui_lib::run()
+    openrgb_action_lib::run()
 }
