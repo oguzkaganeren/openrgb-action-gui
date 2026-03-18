@@ -37,7 +37,7 @@ function describeAction(a: RgbAction): string {
     case "TurnOff":       return "Turn off LEDs";
     case "SetColor":      return `Set color #${a.hex}`;
     case "LoadProfile":   return `Load profile "${a.name}"`;
-    case "SetBrightness": return `Set brightness ${a.percent}%`;
+
   }
 }
 
