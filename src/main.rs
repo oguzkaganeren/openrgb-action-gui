@@ -46,7 +46,9 @@ fn main() {
         });
     });
 
-    let app = RelmApp::new("org.openrgb.ruler").with_args(gtk_args);
+    let app = RelmApp::new("org.openrgb.ruler")
+        .with_args(gtk_args)
+        .visible_on_activate(!start_in_tray);
     app.run::<AppWindow>(AppInit {
         start_in_tray,
         rules,
