@@ -1,7 +1,7 @@
 # Maintainer: Oguz Kaganer Eren <oguzkaganeren@gmail.com>
 
 pkgname=openrgb-ruler
-pkgver=1.0.3
+pkgver=1.0.4
 pkgrel=1
 pkgdesc="GUI for automated RGB lighting control rules via OpenRGB"
 arch=('x86_64')
@@ -20,7 +20,7 @@ depends=(
 )
 install=${pkgname}.install
 source=("https://github.com/oguzkaganeren/openrgb-ruler/releases/download/v${pkgver}/openrgb-ruler-gtk-v${pkgver}-linux-x86_64.tar.gz")
-sha256sums=('7b99393e400eef1541b015af44e77490777022855ea598dc0961d0c78ef05189')
+sha256sums=('f9abaa515e1110af6b435f900c1c347a14a5f667968d80f2645316bdfdcddcf5')
 
 package() {
   install -Dm755 "${srcdir}/openrgb-ruler-gtk" \
