@@ -18,6 +18,12 @@ use ui::window::{AppInit, AppWindow};
 fn main() {
     let start_in_tray = env::args().any(|a| a == "--tray");
 
+    // gtk::Application::run() re-parses std::env::args() as GApplication options.
+    // "--tray" isn't a registered GApplication option, so GLib rejects it with
+    // "Unknown option --tray" and quits before the window is ever created. Strip
+    // it here since we've already consumed it above via our own manual scan.
+    let gtk_args: Vec<String> = env::args().filter(|a| a != "--tray").collect();
+
     openrgb::prefetch();
 
     let rules = new_shared_rules();
@@ -40,7 +46,7 @@ fn main() {
         });
     });
 
-    let app = RelmApp::new("org.openrgb.ruler");
+    let app = RelmApp::new("org.openrgb.ruler").with_args(gtk_args);
     app.run::<AppWindow>(AppInit {
         start_in_tray,
         rules,

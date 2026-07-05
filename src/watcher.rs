@@ -34,6 +34,18 @@ trait Login1Session {
 
     #[zbus(signal)]
     fn unlock(&self) -> zbus::Result<()>;
+
+    /// Authoritative, DE-agnostic lock state: set by whichever component actually
+    /// locks the screen (GNOME Shell, kscreenlocker, swaylock-logind, ...), unlike
+    /// the `Lock`/`Unlock` signals above which only fire for explicit lock *requests*
+    /// (e.g. `loginctl lock-session`) and are not emitted by every desktop on manual lock.
+    #[zbus(property)]
+    fn locked_hint(&self) -> zbus::Result<bool>;
+
+    /// DE-agnostic idle flag. Only flips true once the desktop's own configured idle
+    /// timeout elapses, so it's an approximation, not a precise per-rule timer.
+    #[zbus(property)]
+    fn idle_hint(&self) -> zbus::Result<bool>;
 }
 
 #[zbus::proxy(
@@ -54,7 +66,8 @@ pub fn start_watchers(rules: Arc<RwLock<Vec<Rule>>>, event_tx: mpsc::Sender<Watc
     let r2 = rules.clone(); let tx2 = event_tx.clone();
     let r3 = rules.clone(); let tx3 = event_tx.clone();
     let r4 = rules.clone(); let tx4 = event_tx.clone();
-    let r5 = rules;         let tx5 = event_tx;
+    let r5 = rules.clone(); let tx5 = event_tx.clone();
+    let r6 = rules;         let tx6 = event_tx;
 
     tokio::spawn(async move {
         if let Err(e) = screensaver_watcher(r1, tx1).await {
@@ -76,6 +89,12 @@ pub fn start_watchers(rules: Arc<RwLock<Vec<Rule>>>, event_tx: mpsc::Sender<Watc
 
     tokio::spawn(process_watcher(r4, tx4));
     tokio::spawn(time_watcher(r5, tx5));
+
+    tokio::spawn(async move {
+        if let Err(e) = idle_watcher(r6, tx6).await {
+            eprintln!("[watcher] login1 idle DBus error: {e}");
+        }
+    });
 }
 
 // ── Rule evaluator ────────────────────────────────────────────────────────────
@@ -150,7 +169,54 @@ async fn screensaver_watcher(
     Ok(())
 }
 
-// ── DBus: login1 Session (fallback for systemd-logind) ────────────────────────
+// ── DBus: login1 Session (systemd-logind lock state, DE-agnostic) ─────────────
+
+/// Resolve the object path of the graphical session to watch. Tries, in order:
+/// 1. `GetSessionByPID` (works when this process's cgroup belongs to the login session)
+/// 2. `GetSession($XDG_SESSION_ID)`
+/// 3. `ListSessions` — pick the session bound to a real seat with `Active == true`.
+///
+/// The process running this app (e.g. launched from an editor's integrated terminal,
+/// a detached service, or a sandbox) may sit in its own logind session with no seat,
+/// separate from the actual desktop session — in that case (1) and (2) fail and (3)
+/// finds the real seat0 session instead.
+async fn resolve_own_session_path(
+    manager: &zbus::Proxy<'_>,
+) -> zbus::Result<zbus::zvariant::OwnedObjectPath> {
+    let pid = std::process::id();
+    if let Ok(path) = manager.call("GetSessionByPID", &(pid,)).await {
+        return Ok(path);
+    }
+
+    if let Ok(session_id) = std::env::var("XDG_SESSION_ID") {
+        if let Ok(path) = manager.call::<_, _, zbus::zvariant::OwnedObjectPath>("GetSession", &(session_id,)).await {
+            return Ok(path);
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    let sessions: Vec<(String, u32, String, String, zbus::zvariant::OwnedObjectPath)> =
+        manager.call("ListSessions", &()).await?;
+
+    let connection = manager.connection();
+    for (_id, _uid, _user, seat, path) in &sessions {
+        if seat.is_empty() {
+            continue;
+        }
+        let props = zbus::Proxy::new(connection, "org.freedesktop.login1", path.clone(), "org.freedesktop.login1.Session").await?;
+        if let Ok(active) = props.get_property::<bool>("Active").await {
+            if active {
+                return Ok(path.clone());
+            }
+        }
+    }
+
+    sessions
+        .into_iter()
+        .find(|(_, _, _, seat, _)| !seat.is_empty())
+        .map(|(_, _, _, _, path)| path)
+        .ok_or_else(|| zbus::Error::Failure("no seat-bound logind session found".into()))
+}
 
 async fn login1_watcher(
     rules: Arc<RwLock<Vec<Rule>>>,
@@ -165,9 +231,7 @@ async fn login1_watcher(
         .build()
         .await?;
 
-    let pid = std::process::id();
-    let session_path: zbus::zvariant::OwnedObjectPath =
-        manager.call("GetSessionByPID", &(pid,)).await?;
+    let session_path = resolve_own_session_path(&manager).await?;
 
     let session: Login1SessionProxy<'_> = Login1SessionProxy::builder(&connection)
         .path(session_path)?
@@ -176,6 +240,7 @@ async fn login1_watcher(
 
     let mut lock_stream = session.receive_lock().await?;
     let mut unlock_stream = session.receive_unlock().await?;
+    let mut locked_hint_stream = session.receive_locked_hint_changed().await;
 
     loop {
         tokio::select! {
@@ -184,6 +249,12 @@ async fn login1_watcher(
             }
             Some(_) = unlock_stream.next() => {
                 evaluate_trigger(&Trigger::SystemUnlock, &rules, &event_tx);
+            }
+            Some(change) = locked_hint_stream.next() => {
+                if let Ok(locked) = change.get().await {
+                    let trigger = if locked { Trigger::SystemLock } else { Trigger::SystemUnlock };
+                    evaluate_trigger(&trigger, &rules, &event_tx);
+                }
             }
             else => break,
         }
@@ -210,6 +281,71 @@ async fn sleep_watcher(
             Trigger::Resume
         };
         evaluate_trigger(&trigger, &rules, &event_tx);
+    }
+
+    Ok(())
+}
+
+// ── DBus: login1 Session IdleHint (approximate session-idle duration) ────────
+//
+// `IdleHint` only flips true once the desktop's own configured idle timeout
+// elapses (e.g. GNOME's screen-blank timer), so a rule's `seconds` value is
+// counted *from that point*, not from the user's actual last input. A rule
+// configured for less than the desktop's idle timeout will still only fire
+// after the desktop's own timeout is reached first.
+
+async fn idle_watcher(
+    rules: Arc<RwLock<Vec<Rule>>>,
+    event_tx: mpsc::Sender<WatcherEvent>,
+) -> zbus::Result<()> {
+    let connection = zbus::Connection::system().await?;
+
+    let manager: zbus::Proxy<'_> = zbus::proxy::Builder::new(&connection)
+        .destination("org.freedesktop.login1")?
+        .path("/org/freedesktop/login1")?
+        .interface("org.freedesktop.login1.Manager")?
+        .build()
+        .await?;
+
+    let session_path = resolve_own_session_path(&manager).await?;
+
+    let session: Login1SessionProxy<'_> = Login1SessionProxy::builder(&connection)
+        .path(session_path)?
+        .build()
+        .await?;
+
+    let mut idle_hint_stream = session.receive_idle_hint_changed().await;
+    let mut pending: Vec<tokio::task::JoinHandle<()>> = Vec::new();
+
+    while let Some(change) = idle_hint_stream.next().await {
+        for handle in pending.drain(..) {
+            handle.abort();
+        }
+
+        let Ok(true) = change.get().await else { continue };
+
+        let thresholds: HashSet<u64> = {
+            let Ok(guard) = rules.read() else { continue };
+            guard
+                .iter()
+                .filter(|r| r.enabled)
+                .flat_map(|r| {
+                    r.triggers.iter().filter_map(|t| match t {
+                        Trigger::SessionIdle { seconds } => Some(*seconds),
+                        _ => None,
+                    })
+                })
+                .collect()
+        };
+
+        for secs in thresholds {
+            let rules = rules.clone();
+            let event_tx = event_tx.clone();
+            pending.push(tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_secs(secs)).await;
+                evaluate_trigger(&Trigger::SessionIdle { seconds: secs }, &rules, &event_tx);
+            }));
+        }
     }
 
     Ok(())
